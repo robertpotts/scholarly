@@ -74,12 +74,24 @@ def _handle_captcha(url):
     return resp_captcha.url
 
 
-def _get_page(pagerequest):
+def _get_page(pagerequest, save=False):
     """Return the data for a page on scholar.google.com"""
     # Note that we include a sleep to avoid overloading the scholar server
-    time.sleep(5+random.uniform(0, 5))
+
+    # TODO: Add check for existing data prior to download
+    # print("LOOKING UP BEFORE DOWNLOADING")
+    # if the files exist
+    #   return the text response
+    # else
+    # proceed as normal
+
+    time.sleep(5 + random.uniform(0, 5))
     resp = _SESSION.get(pagerequest, headers=_HEADERS, cookies=_COOKIES)
     if resp.status_code == 200:
+        if save:
+            filename = hash(pagerequest)
+            with open("{}.html".format(filename), "wb") as file:
+                file.write(resp.content)
         return resp.text
     if resp.status_code == 503:
         # Inelegant way of dealing with the G captcha
@@ -94,9 +106,9 @@ def _get_page(pagerequest):
         raise Exception('Error: {0} {1}'.format(resp.status_code, resp.reason))
 
 
-def _get_soup(pagerequest):
+def _get_soup(pagerequest, save=False):
     """Return the BeautifulSoup for a page on scholar.google.com"""
-    html = _get_page(pagerequest)
+    html = _get_page(pagerequest, save)
     html = html.replace(u'\xa0', u' ')
     return BeautifulSoup(html, 'html.parser')
 
@@ -125,6 +137,7 @@ def _search_citation_soup(soup):
             soup = _get_soup(_HOST+url)
         else:
             break
+
 
 def _find_tag_class_name(__data, tag, text):
     elements = __data.find_all(tag)
@@ -314,10 +327,10 @@ class Author(object):
         return pprint.pformat(self.__dict__)
 
 
-def search_pubs_query(query):
+def search_pubs_query(query, save=False):
     """Search by scholar query and return a generator of Publication objects"""
     url = _PUBSEARCH.format(requests.utils.quote(query))
-    soup = _get_soup(_HOST+url)
+    soup = _get_soup(_HOST+url, save)
     return _search_scholar_soup(soup)
 
 
@@ -347,4 +360,3 @@ def search_author_custom_url(url):
     URL should be of the form '/citation?q=...'"""
     soup = _get_soup(_HOST+url)
     return _search_citation_soup(soup)
-
