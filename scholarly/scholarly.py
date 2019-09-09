@@ -123,19 +123,19 @@ def _get_soup(pagerequest, archive=False):
     return BeautifulSoup(html, 'html.parser')
 
 
-def _search_scholar_soup(soup):
+def _search_scholar_soup(soup, archive=False):
     """Generator that returns Publication objects from the search page"""
     while True:
         for row in soup.find_all('div', 'gs_or'):
             yield Publication(row, 'scholar')
         if soup.find(class_='gs_ico gs_ico_nav_next'):
             url = soup.find(class_='gs_ico gs_ico_nav_next').parent['href']
-            soup = _get_soup(_HOST+url)
+            soup = _get_soup(_HOST+url, archive)
         else:
             break
 
 
-def _search_citation_soup(soup):
+def _search_citation_soup(soup, archive=False):
     """Generator that returns Author objects from the author search page"""
     while True:
         for row in soup.find_all('div', 'gsc_1usr'):
@@ -144,7 +144,7 @@ def _search_citation_soup(soup):
         if next_button and 'disabled' not in next_button.attrs:
             url = next_button['onclick'][17:-1]
             url = codecs.getdecoder("unicode_escape")(url)[0]
-            soup = _get_soup(_HOST+url)
+            soup = _get_soup(_HOST+url, archive)
         else:
             break
 
@@ -197,11 +197,11 @@ class Publication(object):
                 self.bib['eprint'] = __data.find('div', class_='gs_ggs gs_fl').a['href']
         self._filled = False
 
-    def fill(self):
+    def fill(self, archive=False):
         """Populate the Publication with information from its profile"""
         if self.source == 'citations':
             url = _CITATIONPUB.format(self.id_citations)
-            soup = _get_soup(_HOST+url)
+            soup = _get_soup(_HOST+url, archive)
             self.bib['title'] = soup.find('div', id='gsc_vcd_title').text
             if soup.find('a', class_='gsc_vcd_title_link'):
                 self.bib['url'] = soup.find('a', class_='gsc_vcd_title_link')['href']
@@ -243,7 +243,7 @@ class Publication(object):
             self._filled = True
         return self
 
-    def get_citedby(self):
+    def get_citedby(self, archive=False):
         """Searches GScholar for other articles that cite this Publication and
         returns a Publication generator.
         """
@@ -251,7 +251,7 @@ class Publication(object):
             self.fill()
         if hasattr(self, 'id_scholarcitedby'):
             url = _SCHOLARPUB.format(requests.utils.quote(self.id_scholarcitedby))
-            soup = _get_soup(_HOST+url)
+            soup = _get_soup(_HOST+url, archive)
             return _search_scholar_soup(soup)
         else:
             return []
@@ -282,11 +282,11 @@ class Author(object):
                 self.citedby = int(citedby.text[9:])
         self._filled = False
 
-    def fill(self):
+    def fill(self, archive=False):
         """Populate the Author with information from their profile"""
         url_citations = _CITATIONAUTH.format(self.id)
         url = '{0}&pagesize={1}'.format(url_citations, _PAGESIZE)
-        soup = _get_soup(_HOST+url)
+        soup = _get_soup(_HOST+url, archive)
         self.name = soup.find('div', id='gsc_prf_in').text
         self.affiliation = soup.find('div', class_='gsc_prf_il').text
         self.interests = [i.text.strip() for i in soup.find_all('a', class_='gsc_prf_inta')]
@@ -326,7 +326,7 @@ class Author(object):
             if 'disabled' not in soup.find('button', id='gsc_bpf_more').attrs:
                 pubstart += _PAGESIZE
                 url = '{0}&cstart={1}&pagesize={2}'.format(url_citations, pubstart, _PAGESIZE)
-                soup = _get_soup(_HOST+url)
+                soup = _get_soup(_HOST+url, archive)
             else:
                 break
 
@@ -341,32 +341,32 @@ def search_pubs_query(query, archive=False):
     """Search by scholar query and return a generator of Publication objects"""
     url = _PUBSEARCH.format(requests.utils.quote(query))
     soup = _get_soup(_HOST+url, archive)
-    return _search_scholar_soup(soup)
+    return _search_scholar_soup(soup, archive)
 
 
-def search_author(name):
+def search_author(name, archive=False):
     """Search by author name and return a generator of Author objects"""
     url = _AUTHSEARCH.format(requests.utils.quote(name))
-    soup = _get_soup(_HOST+url)
-    return _search_citation_soup(soup)
+    soup = _get_soup(_HOST+url, archive)
+    return _search_citation_soup(soup, archive)
 
 
-def search_keyword(keyword):
+def search_keyword(keyword, archive=False):
     """Search by keyword and return a generator of Author objects"""
     url = _KEYWORDSEARCH.format(requests.utils.quote(keyword))
-    soup = _get_soup(_HOST+url)
-    return _search_citation_soup(soup)
+    soup = _get_soup(_HOST+url, archive)
+    return _search_citation_soup(soup, archive)
 
 
-def search_pubs_custom_url(url):
+def search_pubs_custom_url(url, archive=False):
     """Search by custom URL and return a generator of Publication objects
     URL should be of the form '/scholar?q=...'"""
-    soup = _get_soup(_HOST+url)
+    soup = _get_soup(_HOST+url, archive)
     return _search_scholar_soup(soup)
 
 
-def search_author_custom_url(url):
+def search_author_custom_url(url, archive=False):
     """Search by custom URL and return a generator of Publication objects
     URL should be of the form '/citation?q=...'"""
-    soup = _get_soup(_HOST+url)
+    soup = _get_soup(_HOST+url, archive)
     return _search_citation_soup(soup)
