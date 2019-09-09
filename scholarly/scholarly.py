@@ -35,11 +35,13 @@ _CITATIONAUTHRE = r'user=([\w-]*)'
 _CITATIONPUBRE = r'citation_for_view=([\w-]*:[\w-]*)'
 _SCHOLARCITERE = r'gs_ocit\(event,\'([\w-]*)\''
 _SCHOLARPUBRE = r'cites=([\w-]*)'
+_SCHOLARPUB2RE = r'cluster=([\w-]*)'
 _EMAILAUTHORRE = r'Verified email at '
 _FILENAMERE = r'[^\w_)( -]'
 
 _SESSION = requests.Session()
 _PAGESIZE = 100
+_PAGEMAX = 10
 
 
 def use_proxy(http='socks5://127.0.0.1:9050', https='socks5://127.0.0.1:9050'):
@@ -125,7 +127,9 @@ def _get_soup(pagerequest, archive=False):
 
 def _search_scholar_soup(soup, archive=False):
     """Generator that returns Publication objects from the search page"""
-    while True:
+    pagecount = 0
+    while pagecount < _PAGEMAX:
+        pagecount += 1
         for row in soup.find_all('div', 'gs_or'):
             yield Publication(row, 'scholar')
         if soup.find(class_='gs_ico gs_ico_nav_next'):
@@ -161,6 +165,8 @@ class Publication(object):
     def __init__(self, __data, pubtype=None):
         self.bib = dict()
         self.source = pubtype
+        self.versions = None
+        self.id_scholarcitedby = None
         if self.source == 'citations':
             self.bib['title'] = __data.find('a', class_='gsc_a_at').text
             self.id_citations = re.findall(_CITATIONPUBRE, __data.find('a', class_='gsc_a_at')['data-href'])[0]
@@ -193,6 +199,10 @@ class Publication(object):
                 if 'Cited by' in link.text:
                     self.citedby = int(re.findall(r'\d+', link.text)[0])
                     self.id_scholarcitedby = re.findall(_SCHOLARPUBRE, link['href'])[0]
+                if "versions" in link.text:
+                    print("IN VERSIONS")
+                    self.versions = int(re.findall(r'\d+', link.text)[0])
+                    self.id_scholarcitedby = re.findall(_SCHOLARPUB2RE, link['href'])[0]
             if __data.find('div', class_='gs_ggs gs_fl'):
                 self.bib['eprint'] = __data.find('div', class_='gs_ggs gs_fl').a['href']
         self._filled = False
@@ -238,7 +248,7 @@ class Publication(object):
                 self.bib['eprint'] = soup.find('div', class_='gsc_vcd_title_ggi').a['href']
             self._filled = True
         elif self.source == 'scholar':
-            bibtex = _get_page(self.url_scholarbib)
+            bibtex = _get_page(self.url_scholarbib, archive)
             self.bib.update(bibtexparser.loads(bibtex).entries[0])
             self._filled = True
         return self
@@ -248,11 +258,11 @@ class Publication(object):
         returns a Publication generator.
         """
         if not hasattr(self, 'id_scholarcitedby'):
-            self.fill()
+            self.fill(archive)
         if hasattr(self, 'id_scholarcitedby'):
             url = _SCHOLARPUB.format(requests.utils.quote(self.id_scholarcitedby))
             soup = _get_soup(_HOST+url, archive)
-            return _search_scholar_soup(soup)
+            return _search_scholar_soup(soup, archive)
         else:
             return []
 
@@ -362,11 +372,11 @@ def search_pubs_custom_url(url, archive=False):
     """Search by custom URL and return a generator of Publication objects
     URL should be of the form '/scholar?q=...'"""
     soup = _get_soup(_HOST+url, archive)
-    return _search_scholar_soup(soup)
+    return _search_scholar_soup(soup, archive)
 
 
 def search_author_custom_url(url, archive=False):
     """Search by custom URL and return a generator of Publication objects
     URL should be of the form '/citation?q=...'"""
     soup = _get_soup(_HOST+url, archive)
-    return _search_citation_soup(soup)
+    return _search_citation_soup(soup, archive)
