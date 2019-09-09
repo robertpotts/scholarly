@@ -36,6 +36,7 @@ _CITATIONPUBRE = r'citation_for_view=([\w-]*:[\w-]*)'
 _SCHOLARCITERE = r'gs_ocit\(event,\'([\w-]*)\''
 _SCHOLARPUBRE = r'cites=([\w-]*)'
 _EMAILAUTHORRE = r'Verified email at '
+_FILENAMERE = r'[^\w_)( -]'
 
 _SESSION = requests.Session()
 _PAGESIZE = 100
@@ -78,8 +79,8 @@ def _handle_captcha(url):
 def _get_page(pagerequest, archive=False):
     """Return the data for a page on scholar.google.com"""
 
-    filename = "{}.html".format(hash(pagerequest))
-    path = pathlib.Path(filename)
+    filename = re.sub(_FILENAMERE, '_', pagerequest)
+    path = pathlib.Path("archive", filename).with_suffix(".html")
 
     # Check if the file has already been accessed and archived
     if path.exists():
@@ -96,7 +97,8 @@ def _get_page(pagerequest, archive=False):
         if resp.status_code == 200:
             # If we're archiving the
             if archive:
-                with open(filename, "wb") as file:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with open(str(path), "wb") as file:
                     file.write(resp.content)
             return resp.text
         # Request returned reCAPTCHA
