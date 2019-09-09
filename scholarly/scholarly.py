@@ -9,6 +9,7 @@ import bibtexparser
 import codecs
 import hashlib
 import pprint
+import pathlib
 import random
 import re
 import requests
@@ -74,41 +75,48 @@ def _handle_captcha(url):
     return resp_captcha.url
 
 
-def _get_page(pagerequest, save=False):
+def _get_page(pagerequest, archive=False):
     """Return the data for a page on scholar.google.com"""
-    # Note that we include a sleep to avoid overloading the scholar server
 
-    # TODO: Add check for existing data prior to download
-    # print("LOOKING UP BEFORE DOWNLOADING")
-    # if the files exist
-    #   return the text response
-    # else
-    # proceed as normal
+    filename = "{}.html".format(hash(pagerequest))
+    path = pathlib.Path(filename)
 
-    time.sleep(5 + random.uniform(0, 5))
-    resp = _SESSION.get(pagerequest, headers=_HEADERS, cookies=_COOKIES)
-    if resp.status_code == 200:
-        if save:
-            filename = hash(pagerequest)
-            with open("{}.html".format(filename), "wb") as file:
-                file.write(resp.content)
-        return resp.text
-    if resp.status_code == 503:
-        # Inelegant way of dealing with the G captcha
-        raise Exception('Error: {0} {1}'.format(resp.status_code, resp.reason))
-        # TODO: Need to fix captcha handling
-        # dest_url = requests.utils.quote(_SCHOLARHOST+pagerequest)
-        # soup = BeautifulSoup(resp.text, 'html.parser')
-        # captcha_url = soup.find('img').get('src')
-        # resp = _handle_captcha(captcha_url)
-        # return _get_page(re.findall(r'https:\/\/(?:.*?)(\/.*)', resp)[0])
+    # Check if the file has already been accessed and archived
+    if path.exists():
+        # If yes, then return the result
+        return path.read_text()
     else:
-        raise Exception('Error: {0} {1}'.format(resp.status_code, resp.reason))
+        # If no, then go collect it
+
+        # Note that we include a sleep to avoid overloading the scholar server
+        time.sleep(5 + random.uniform(0, 5))
+        resp = _SESSION.get(pagerequest, headers=_HEADERS, cookies=_COOKIES)
+
+        # Good request result
+        if resp.status_code == 200:
+            # If we're archiving the
+            if archive:
+                with open(filename, "wb") as file:
+                    file.write(resp.content)
+            return resp.text
+        # Request returned reCAPTCHA
+        elif resp.status_code == 503:
+            # Inelegant way of dealing with the G captcha
+            raise Exception('Error: {0} {1}'.format(resp.status_code, resp.reason))
+            # TODO: Need to fix captcha handling
+            # dest_url = requests.utils.quote(_SCHOLARHOST+pagerequest)
+            # soup = BeautifulSoup(resp.text, 'html.parser')
+            # captcha_url = soup.find('img').get('src')
+            # resp = _handle_captcha(captcha_url)
+            # return _get_page(re.findall(r'https:\/\/(?:.*?)(\/.*)', resp)[0])
+        # Other bad request result
+        else:
+            raise Exception('Error: {0} {1}'.format(resp.status_code, resp.reason))
 
 
-def _get_soup(pagerequest, save=False):
+def _get_soup(pagerequest, archive=False):
     """Return the BeautifulSoup for a page on scholar.google.com"""
-    html = _get_page(pagerequest, save)
+    html = _get_page(pagerequest, archive)
     html = html.replace(u'\xa0', u' ')
     return BeautifulSoup(html, 'html.parser')
 
@@ -327,10 +335,10 @@ class Author(object):
         return pprint.pformat(self.__dict__)
 
 
-def search_pubs_query(query, save=False):
+def search_pubs_query(query, archive=False):
     """Search by scholar query and return a generator of Publication objects"""
     url = _PUBSEARCH.format(requests.utils.quote(query))
-    soup = _get_soup(_HOST+url, save)
+    soup = _get_soup(_HOST+url, archive)
     return _search_scholar_soup(soup)
 
 
